@@ -52,3 +52,50 @@ resource "aws_iam_role_policy_attachment" "ec2_tag_enforcer_logs" {
   role       = aws_iam_role.ec2_tag_enforcer.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
+
+# ---------- Role 2: EBS snapshot ----------
+resource "aws_iam_role" "ebs_snapshot" {
+  name               = "cost-guardian-ebs-snapshot-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+data "aws_iam_policy_document" "ebs_snapshot" {
+  statement {
+    sid       = "ReadVolumes"
+    actions   = ["ec2:DescribeVolumes"]
+    resources = ["*"]
+  }
+
+  # CreateSnapshot touches two resources: the source volume and the new snapshot
+  statement {
+    sid     = "CreateSnapshots"
+    actions = ["ec2:CreateSnapshot"]
+    resources = [
+      "arn:aws:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:volume/*",
+      "arn:aws:ec2:${data.aws_region.current.region}::snapshot/*"
+    ]
+  }
+
+  # May tag snapshots ONLY as part of creating them - not re-tag existing resources
+  statement {
+    sid       = "TagOnlyOnCreate"
+    actions   = ["ec2:CreateTags"]
+    resources = ["arn:aws:ec2:${data.aws_region.current.region}::snapshot/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "ec2:CreateAction"
+      values   = ["CreateSnapshot"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "ebs_snapshot" {
+  name   = "ebs-snapshot-permissions"
+  role   = aws_iam_role.ebs_snapshot.id
+  policy = data.aws_iam_policy_document.ebs_snapshot.json
+}
+
+resource "aws_iam_role_policy_attachment" "ebs_snapshot_logs" {
+  role       = aws_iam_role.ebs_snapshot.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}

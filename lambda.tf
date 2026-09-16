@@ -29,3 +29,34 @@ resource "aws_lambda_function" "ec2_tag_enforcer" {
 
   depends_on = [aws_cloudwatch_log_group.ec2_tag_enforcer]
 }
+
+# ---------- Function 2: EBS snapshot ----------
+data "archive_file" "ebs_snapshot" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/ebs_snapshot.py"
+  output_path = "${path.module}/build/ebs_snapshot.zip"
+}
+
+resource "aws_cloudwatch_log_group" "ebs_snapshot" {
+  name              = "/aws/lambda/cost-guardian-ebs-snapshot"
+  retention_in_days = 14
+}
+
+resource "aws_lambda_function" "ebs_snapshot" {
+  function_name = "cost-guardian-ebs-snapshot"
+  role          = aws_iam_role.ebs_snapshot.arn
+  runtime       = "python3.13"
+  handler       = "ebs_snapshot.handler"
+  timeout       = 60
+
+  filename         = data.archive_file.ebs_snapshot.output_path
+  source_code_hash = data.archive_file.ebs_snapshot.output_base64sha256
+
+  environment {
+    variables = {
+      BACKUP_TAG = "Backup"
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.ebs_snapshot]
+}

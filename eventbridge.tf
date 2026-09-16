@@ -17,3 +17,23 @@ resource "aws_lambda_permission" "ec2_tag_enforcer_eventbridge" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.ec2_tag_enforcer.arn
 }
+
+# ---------- Schedule 2: EBS snapshot, nightly 01:00 UTC ----------
+resource "aws_cloudwatch_event_rule" "ebs_snapshot" {
+  name                = "cost-guardian-ebs-snapshot-nightly"
+  description         = "Snapshot volumes tagged Backup=true"
+  schedule_expression = "cron(0 1 * * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "ebs_snapshot" {
+  rule = aws_cloudwatch_event_rule.ebs_snapshot.name
+  arn  = aws_lambda_function.ebs_snapshot.arn
+}
+
+resource "aws_lambda_permission" "ebs_snapshot_eventbridge" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.ebs_snapshot.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.ebs_snapshot.arn
+}
