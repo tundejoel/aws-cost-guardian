@@ -7,7 +7,7 @@ variable "required_tag_key" {
 variable "dry_run" {
   description = "When true, the enforcer only logs what it would stop"
   type        = bool
-  default     = true
+  default     = false
 }
 
 variable "snapshot_retention_days" {
