@@ -60,3 +60,35 @@ resource "aws_lambda_function" "ebs_snapshot" {
 
   depends_on = [aws_cloudwatch_log_group.ebs_snapshot]
 }
+
+# ---------- Function 3: snapshot cleanup ----------
+data "archive_file" "snapshot_cleanup" {
+  type        = "zip"
+  source_file = "${path.module}/lambda/snapshot_cleanup.py"
+  output_path = "${path.module}/build/snapshot_cleanup.zip"
+}
+
+resource "aws_cloudwatch_log_group" "snapshot_cleanup" {
+  name              = "/aws/lambda/cost-guardian-snapshot-cleanup"
+  retention_in_days = 14
+}
+
+resource "aws_lambda_function" "snapshot_cleanup" {
+  function_name = "cost-guardian-snapshot-cleanup"
+  role          = aws_iam_role.snapshot_cleanup.arn
+  runtime       = "python3.13"
+  handler       = "snapshot_cleanup.handler"
+  timeout       = 60
+
+  filename         = data.archive_file.snapshot_cleanup.output_path
+  source_code_hash = data.archive_file.snapshot_cleanup.output_base64sha256
+
+  environment {
+    variables = {
+      RETENTION_DAYS = tostring(var.snapshot_retention_days)
+      DRY_RUN        = tostring(var.dry_run)
+    }
+  }
+
+  depends_on = [aws_cloudwatch_log_group.snapshot_cleanup]
+}

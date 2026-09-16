@@ -37,3 +37,23 @@ resource "aws_lambda_permission" "ebs_snapshot_eventbridge" {
   principal     = "events.amazonaws.com"
   source_arn    = aws_cloudwatch_event_rule.ebs_snapshot.arn
 }
+
+# ---------- Schedule 3: snapshot cleanup, nightly 03:00 UTC ----------
+resource "aws_cloudwatch_event_rule" "snapshot_cleanup" {
+  name                = "cost-guardian-snapshot-cleanup-nightly"
+  description         = "Delete cost-guardian snapshots older than the retention window"
+  schedule_expression = "cron(0 3 * * ? *)"
+}
+
+resource "aws_cloudwatch_event_target" "snapshot_cleanup" {
+  rule = aws_cloudwatch_event_rule.snapshot_cleanup.name
+  arn  = aws_lambda_function.snapshot_cleanup.arn
+}
+
+resource "aws_lambda_permission" "snapshot_cleanup_eventbridge" {
+  statement_id  = "AllowEventBridgeInvoke"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.snapshot_cleanup.function_name
+  principal     = "events.amazonaws.com"
+  source_arn    = aws_cloudwatch_event_rule.snapshot_cleanup.arn
+}

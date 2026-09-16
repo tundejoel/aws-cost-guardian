@@ -99,3 +99,40 @@ resource "aws_iam_role_policy_attachment" "ebs_snapshot_logs" {
   role       = aws_iam_role.ebs_snapshot.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
+
+# ---------- Role 3: snapshot cleanup ----------
+resource "aws_iam_role" "snapshot_cleanup" {
+  name               = "cost-guardian-snapshot-cleanup-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+data "aws_iam_policy_document" "snapshot_cleanup" {
+  statement {
+    sid       = "ReadSnapshots"
+    actions   = ["ec2:DescribeSnapshots"]
+    resources = ["*"]
+  }
+
+  # May delete ONLY snapshots this system signed
+  statement {
+    sid       = "DeleteOwnSnapshotsOnly"
+    actions   = ["ec2:DeleteSnapshot"]
+    resources = ["arn:aws:ec2:${data.aws_region.current.region}::snapshot/*"]
+    condition {
+      test     = "StringEquals"
+      variable = "aws:ResourceTag/CreatedBy"
+      values   = ["cost-guardian"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "snapshot_cleanup" {
+  name   = "snapshot-cleanup-permissions"
+  role   = aws_iam_role.snapshot_cleanup.id
+  policy = data.aws_iam_policy_document.snapshot_cleanup.json
+}
+
+resource "aws_iam_role_policy_attachment" "snapshot_cleanup_logs" {
+  role       = aws_iam_role.snapshot_cleanup.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
