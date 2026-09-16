@@ -1,0 +1,54 @@
+data "aws_caller_identity" "current" {}
+data "aws_region" "current" {}
+
+# Trust policy shared by all four roles: only the Lambda service may assume them
+data "aws_iam_policy_document" "lambda_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+# ---------- Role 1: EC2 tag enforcer ----------
+resource "aws_iam_role" "ec2_tag_enforcer" {
+  name               = "cost-guardian-ec2-tag-enforcer-role"
+  assume_role_policy = data.aws_iam_policy_document.lambda_assume.json
+}
+
+data "aws_iam_policy_document" "ec2_tag_enforcer" {
+  # Describe* actions in EC2 do not support resource-level permissions,
+  # so "*" is the only valid resource here.
+  statement {
+    sid       = "ReadInstances"
+    actions   = ["ec2:DescribeInstances"]
+    resources = ["*"]
+  }
+
+  # May stop instances ONLY if the required tag is absent.
+  statement {
+    sid     = "StopUntaggedOnly"
+    actions = ["ec2:StopInstances"]
+    resources = [
+      "arn:aws:ec2:${data.aws_region.current.region}:${data.aws_caller_identity.current.account_id}:instance/*"
+    ]
+    condition {
+      test     = "Null"
+      variable = "aws:ResourceTag/${var.required_tag_key}"
+      values   = ["true"]
+    }
+  }
+}
+
+resource "aws_iam_role_policy" "ec2_tag_enforcer" {
+  name   = "ec2-tag-enforcer-permissions"
+  role   = aws_iam_role.ec2_tag_enforcer.id
+  policy = data.aws_iam_policy_document.ec2_tag_enforcer.json
+}
+
+resource "aws_iam_role_policy_attachment" "ec2_tag_enforcer_logs" {
+  role       = aws_iam_role.ec2_tag_enforcer.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
+}
